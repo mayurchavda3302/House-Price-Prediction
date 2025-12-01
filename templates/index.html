@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>House Price Predictor</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+        .card {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.8);
+        }
+    </style>
+</head>
+<body class="gradient-bg">
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-3xl mx-auto">
+            <h1 class="text-4xl font-bold text-center text-gray-800 mb-8">🏠 Indian House Price Predictor</h1>
+            
+            <div class="card rounded-lg shadow-xl p-8 mb-8">
+                <form id="predictionForm" class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2" for="size">Size (sqft)</label>
+                            <input type="number" id="size" name="size_sqft" required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2" for="bedrooms">Bedrooms</label>
+                            <select id="bedrooms" name="bedrooms" required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="">Select bedrooms</option>
+                                <option value="1">1 BHK</option>
+                                <option value="2">2 BHK</option>
+                                <option value="3">3 BHK</option>
+                                <option value="4">4 BHK</option>
+                                <option value="5">5+ BHK</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2" for="city">City</label>
+                            <select id="city" name="city" required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="">Select city</option>
+                                <option value="Mumbai">Mumbai</option>
+                                <option value="Delhi">Delhi</option>
+                                <option value="Bangalore">Bangalore</option>
+                                <option value="Hyderabad">Hyderabad</option>
+                                <option value="Pune">Pune</option>
+                                <option value="Chennai">Chennai</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2" for="location">Location/Area</label>
+                            <select id="location" name="location" required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="">Select an area</option>
+                                <!-- Areas will be populated by JavaScript -->
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center">
+                        <button type="submit"
+                            class="px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-300">
+                            Predict Price
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            <div id="result" class="hidden card rounded-lg shadow-xl p-8 text-center">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4">Predicted Price</h2>
+                <div id="prediction" class="text-4xl font-bold text-blue-600 mb-4">₹0.00</div>
+                <p class="text-gray-600">For a <span id="bedrooms-display">-</span> in <span id="location-display">-</span>, <span id="city-display">-</span></p>
+                <p class="text-gray-500 text-sm mt-4">* This is an estimate based on current market trends</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get DOM elements
+        const citySelect = document.getElementById('city');
+        const locationSelect = document.getElementById('location');
+        const predictionForm = document.getElementById('predictionForm');
+        
+        // Cache for areas data
+        const areasCache = {};
+        
+        // When city changes, update areas
+        citySelect.addEventListener('change', async function() {
+            const city = this.value;
+            
+            if (!city) {
+                locationSelect.innerHTML = '<option value="">Select an area</option>';
+                return;
+            }
+            
+            try {
+                // Show loading state
+                locationSelect.disabled = true;
+                locationSelect.innerHTML = '<option value="">Loading areas...</option>';
+                
+                // Check cache first
+                if (areasCache[city]) {
+                    updateAreasDropdown(areasCache[city]);
+                    return;
+                }
+                
+                // Fetch areas from API
+                const response = await fetch(`/api/areas/${city}`);
+                if (!response.ok) {
+                    throw new Error('Failed to load areas');
+                }
+                
+                const data = await response.json();
+                areasCache[city] = data.areas;
+                updateAreasDropdown(data.areas);
+                
+            } catch (error) {
+                console.error('Error loading areas:', error);
+                locationSelect.innerHTML = '<option value="">Error loading areas</option>';
+            } finally {
+                locationSelect.disabled = false;
+            }
+        });
+        
+        // Update areas dropdown
+        function updateAreasDropdown(areas) {
+            locationSelect.innerHTML = '<option value="">Select an area</option>';
+            areas.forEach(area => {
+                const option = document.createElement('option');
+                option.value = area;
+                option.textContent = area;
+                locationSelect.appendChild(option);
+            });
+        }
+        
+        // Handle form submission
+        predictionForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = {
+                size_sqft: parseFloat(formData.get('size_sqft')),
+                bedrooms: parseInt(formData.get('bedrooms')),
+                city: formData.get('city'),
+                location: formData.get('location')
+            };
+            
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to get prediction');
+                }
+                
+                const result = await response.json();
+                
+                // Display result
+                document.getElementById('prediction').textContent = 
+                    '₹' + result.predicted_price.toLocaleString('en-IN');
+                document.getElementById('bedrooms-display').textContent = 
+                    data.bedrooms + 'BHK';
+                document.getElementById('location-display').textContent = 
+                    data.location;
+                document.getElementById('city-display').textContent = 
+                    data.city;
+                
+                // Show result section
+                document.getElementById('result').classList.remove('hidden');
+                
+                // Scroll to result
+                document.getElementById('result').scrollIntoView({ behavior: 'smooth' });
+                
+            } catch (error) {
+                alert('Error: ' + error.message);
+                console.error('Prediction error:', error);
+            }
+        });
+    </script>
+</body>
+</html>
